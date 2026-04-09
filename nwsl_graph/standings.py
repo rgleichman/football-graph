@@ -78,8 +78,3 @@ def compute_standings(matches: list[Match]) -> list[StandingRow]:
         reverse=True,
     )
     return rows
-
-
-def order_teams_for_layout(standings: list[StandingRow]) -> list[str]:
-    """Best team first."""
-    return [r.team for r in standings]

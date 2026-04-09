@@ -24,12 +24,6 @@ def main(argv: list[str] | None = None) -> int:
         default="png,svg",
         help="Comma-separated formats (png, svg, pdf, …)",
     )
-    p.add_argument(
-        "--layout",
-        choices=("neato", "dot"),
-        default="neato",
-        help="neato: pinned standings-like positions; dot: rank tiers",
-    )
     p.add_argument("--json", metavar="PATH", help="ESPN scoreboard JSON file")
     p.add_argument("--csv", metavar="PATH", help="CSV with home,away,home_goals,away_goals")
     p.add_argument(
@@ -78,7 +72,6 @@ def main(argv: list[str] | None = None) -> int:
         badge_paths,
         out,
         formats=formats,
-        layout=args.layout,
     )
     outs = [str(out.with_suffix(f".{fmt}")) for fmt in formats]
     print(f"Wrote {dot_path} and {', '.join(outs)}")

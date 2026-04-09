@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 from nwsl_graph.models import Match
-from nwsl_graph.standings import compute_standings, order_teams_for_layout
+from nwsl_graph.standings import compute_standings
 
 _WIN_COLOR = "#1b5e20"
 _TIE_COLOR = "#757575"
@@ -35,38 +35,9 @@ def _penwidth(diff: int) -> str:
     return f"{w:.3f}"
 
 
-def _layout_positions_neato(standings: list) -> dict[str, tuple[float, float]]:
-    by_team = {r.team: r for r in standings}
-    ordered = order_teams_for_layout(standings)
-    if not ordered:
-        return {}
-
-    tiers: list[list[str]] = []
-    current_points: int | None = None
-    for t in ordered:
-        p = by_team[t].points
-        if current_points is None or p != current_points:
-            tiers.append([t])
-            current_points = p
-        else:
-            tiers[-1].append(t)
-
-    pos: dict[str, tuple[float, float]] = {}
-    n_tiers = len(tiers)
-    for ti, group in enumerate(tiers):
-        y = float(n_tiers - ti) * 1.35
-        m = len(group)
-        for j, team in enumerate(group):
-            angle = (j - (m - 1) / 2.0) * 0.9
-            x = angle * 1.4 + (ti % 2) * 0.4
-            pos[team] = (x, y)
-    return pos
-
-
 def _node_attr_lines(
     team: str,
     badge_paths: dict[str, Path],
-    pos: tuple[float, float] | None,
     *,
     indent: int = 1,
 ) -> str:
@@ -84,8 +55,6 @@ def _node_attr_lines(
     if img:
         ip = str(img.resolve()).replace("\\", "/")
         attrs.append(f'image="{_dot_escape(ip)}"')
-    if pos is not None:
-        attrs.append(f'pos="{pos[0]:.4f},{pos[1]:.4f}!"')
     return f'{sp}{nid} [{" ".join(attrs)}]'
 
 def _maybe_import_graphviz():
@@ -100,8 +69,6 @@ def _maybe_import_graphviz():
 def build_dot_source(
     matches: list[Match],
     badge_paths: dict[str, Path],
-    *,
-    layout: str = "neato",
 ) -> str:
     standings = compute_standings(matches)
     teams: set[str] = set()
@@ -123,28 +90,19 @@ def build_dot_source(
         points_to_teams[pl].sort()
     ordered_points = sorted(points_to_teams.keys(), reverse=True)
 
-    if layout == "neato":
-        lines.append('  graph [overlap=scale]')
-        pos_map = _layout_positions_neato(standings)
-        for team in sorted(teams):
-            p = pos_map.get(team)
-            lines.append(_node_attr_lines(team, badge_paths, p))
-    else:
-        for p in ordered_points:
-            group = points_to_teams[p]
-            lines.append("  {")
-            lines.append("    rank=same;")
-            for team in group:
-                lines.append(_node_attr_lines(team, badge_paths, None, indent=2))
-            lines.append("  }")
+    for p in ordered_points:
+        group = points_to_teams[p]
+        lines.append("  {")
+        lines.append("    rank=same;")
+        for team in group:
+            lines.append(_node_attr_lines(team, badge_paths, indent=2))
+        lines.append("  }")
 
-        reps = [points_to_teams[p][0] for p in ordered_points]
-        for i in range(len(reps) - 1):
-            lines.append(
-                f'  {_nid(reps[i])} -> {_nid(reps[i + 1])} [style=invis constraint=true]'
-            )
+    reps = [points_to_teams[p][0] for p in ordered_points]
+    for i in range(len(reps) - 1):
+        lines.append(f'  {_nid(reps[i])} -> {_nid(reps[i + 1])} [style=invis constraint=true]')
 
-    edge_constraint = "false" if layout == "neato" else "true"
+    edge_constraint = "true"
     for m in matches:
         a, b = _nid(m.home), _nid(m.away)
         diff = m.differential
@@ -174,8 +132,6 @@ def build_dot_source(
 def build_graphviz_digraph(
     matches: list[Match],
     badge_paths: dict[str, Path],
-    *,
-    layout: str = "neato",
 ):
     """Build a graphviz.Digraph if the Python package is available."""
     graphviz = _maybe_import_graphviz()
@@ -200,51 +156,30 @@ def build_graphviz_digraph(
         points_to_teams[pl].sort()
     ordered_points = sorted(points_to_teams.keys(), reverse=True)
 
-    if layout == "neato":
-        g.attr("graph", overlap="scale")
-        pos_map = _layout_positions_neato(standings)
-        for team in sorted(teams):
-            nid = _nid(team)
-            img = badge_paths.get(team)
-            attrs = {
-                "shape": "none",
-                "fixedsize": "true",
-                "width": "0.9",
-                "height": "0.9",
-                "imagescale": "true",
-                "label": "",
-            }
-            if img:
-                attrs["image"] = str(img.resolve())
-            p = pos_map.get(team)
-            if p is not None:
-                attrs["pos"] = f"{p[0]:.4f},{p[1]:.4f}!"
-            g.node(nid, **attrs)
-    else:
-        for p in ordered_points:
-            group = points_to_teams[p]
-            with g.subgraph() as s:
-                s.attr(rank="same")
-                for team in group:
-                    nid = _nid(team)
-                    img = badge_paths.get(team)
-                    attrs = {
-                        "shape": "none",
-                        "fixedsize": "true",
-                        "width": "0.9",
-                        "height": "0.9",
-                        "imagescale": "true",
-                        "label": "",
-                    }
-                    if img:
-                        attrs["image"] = str(img.resolve())
-                    s.node(nid, **attrs)
+    for p in ordered_points:
+        group = points_to_teams[p]
+        with g.subgraph() as s:
+            s.attr(rank="same")
+            for team in group:
+                nid = _nid(team)
+                img = badge_paths.get(team)
+                attrs = {
+                    "shape": "none",
+                    "fixedsize": "true",
+                    "width": "0.9",
+                    "height": "0.9",
+                    "imagescale": "true",
+                    "label": "",
+                }
+                if img:
+                    attrs["image"] = str(img.resolve())
+                s.node(nid, **attrs)
 
-        reps = [points_to_teams[p][0] for p in ordered_points]
-        for i in range(len(reps) - 1):
-            g.edge(_nid(reps[i]), _nid(reps[i + 1]), style="invis", constraint="true")
+    reps = [points_to_teams[p][0] for p in ordered_points]
+    for i in range(len(reps) - 1):
+        g.edge(_nid(reps[i]), _nid(reps[i + 1]), style="invis", constraint="true")
 
-    common = {"constraint": "false"}
+    common = {"constraint": "true"}
     for m in matches:
         a, b = _nid(m.home), _nid(m.away)
         diff = m.differential
@@ -274,27 +209,23 @@ def write_and_render(
     output_base: Path,
     *,
     formats: list[str],
-    layout: str,
 ) -> Path:
-    g = build_graphviz_digraph(matches, badge_paths, layout=layout)
+    g = build_graphviz_digraph(matches, badge_paths)
     output_base = output_base.expanduser().resolve()
     output_base.parent.mkdir(parents=True, exist_ok=True)
     dot_path = output_base.with_suffix(".dot")
     if g is not None:
         dot_path.write_text(g.source, encoding="utf-8")
     else:
-        dot_path.write_text(build_dot_source(matches, badge_paths, layout=layout), encoding="utf-8")
+        dot_path.write_text(build_dot_source(matches, badge_paths), encoding="utf-8")
 
-    engine = "neato" if layout == "neato" else "dot"
+    engine = "dot"
     binary = shutil.which(engine)
     if not binary:
         raise FileNotFoundError(f"Graphviz {engine} binary not found on PATH")
 
     for fmt in formats:
         out = output_base.with_suffix(f".{fmt}")
-        if layout == "neato":
-            cmd = [binary, "-n2", f"-T{fmt}", "-o", str(out), str(dot_path)]
-        else:
-            cmd = [binary, f"-T{fmt}", "-o", str(out), str(dot_path)]
+        cmd = [binary, f"-T{fmt}", "-o", str(out), str(dot_path)]
         subprocess.run(cmd, check=True, capture_output=True, text=True)
     return dot_path
