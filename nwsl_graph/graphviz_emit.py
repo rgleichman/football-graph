@@ -72,9 +72,11 @@ def build_graphviz_digraph(
             attrs["image"] = str(img.resolve())
         return attrs
 
-    points_to_teams: dict[int, list[str]] = {}
+    # Group by rounded normalized score to keep ranks readable.
+    points_to_teams: dict[float, list[str]] = {}
     for r in standings:
-        points_to_teams.setdefault(r.points, []).append(r.team)
+        key = round(float(r.points), 3)
+        points_to_teams.setdefault(key, []).append(r.team)
     for pl in points_to_teams:
         points_to_teams[pl].sort()
     ordered_points = sorted(points_to_teams.keys(), reverse=True)

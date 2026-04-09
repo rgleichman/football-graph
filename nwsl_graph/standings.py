@@ -16,8 +16,11 @@ class StandingRow:
     goals_against: int
 
     @property
-    def points(self) -> int:
-        return self.wins * 3 + self.draws
+    def points(self) -> float:
+        # Normalized scoring: (win +1, loss -1, draw 0) per match played
+        if self.played <= 0:
+            return 0.0
+        return float(self.wins - self.losses) / float(self.played)
 
     @property
     def goal_difference(self) -> int:
@@ -25,7 +28,7 @@ class StandingRow:
 
 
 def compute_standings(matches: list[Match]) -> list[StandingRow]:
-    """Aggregate results; sort NWSL-style: points, GD, goals scored."""
+    """Aggregate results; sort by normalized points, then GD, then goals scored."""
     stats: dict[str, dict[str, int]] = {}
 
     def bump(team: str) -> dict[str, int]:
