@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from nwsl_graph.models import Match
@@ -81,3 +82,68 @@ def compute_standings(matches: list[Match]) -> list[StandingRow]:
         reverse=True,
     )
     return rows
+
+
+def compute_elo_ratings(
+    matches: list[Match],
+    *,
+    initial_rating: float = 1500.0,
+    k_factor: float = 20.0,
+) -> dict[str, float]:
+    """
+    Compute final ELO ratings for all teams appearing in matches.
+
+    Assumptions:
+    - Matches are provided in the desired chronological order.
+    - No home advantage.
+    """
+    teams: set[str] = set()
+    matches_sorted = sorted(
+        matches,
+        key=lambda m: (
+            m.date_utc is None,
+            m.date_utc,
+            m.event_id,
+        ),
+    )
+
+    for m in matches_sorted:
+        teams.add(m.home)
+        teams.add(m.away)
+
+    ratings: dict[str, float] = {t: float(initial_rating) for t in teams}
+
+    def expected(ra: float, rb: float) -> float:
+        return 1.0 / (1.0 + math.pow(10.0, (rb - ra) / 400.0))
+
+    for m in matches_sorted:
+        rh = ratings[m.home]
+        ra = ratings[m.away]
+
+        eh = expected(rh, ra)
+        ea = 1.0 - eh
+
+        if m.is_tie():
+            sh, sa = 0.5, 0.5
+        elif m.home_goals > m.away_goals:
+            sh, sa = 1.0, 0.0
+        else:
+            sh, sa = 0.0, 1.0
+
+        ratings[m.home] = rh + k_factor * (sh - eh)
+        ratings[m.away] = ra + k_factor * (sa - ea)
+
+    return ratings
+
+
+def normalize_scores(scores: dict[str, float]) -> dict[str, float]:
+    """Normalize arbitrary team scores into 0..1 range (stable on ties)."""
+    if not scores:
+        return {}
+    vals = list(scores.values())
+    lo = min(vals)
+    hi = max(vals)
+    if hi <= lo:
+        return {t: 0.0 for t in scores}
+    denom = hi - lo
+    return {t: (v - lo) / denom for t, v in scores.items()}

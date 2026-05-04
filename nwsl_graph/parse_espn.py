@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any
 
 from nwsl_graph.models import Match
@@ -33,6 +34,7 @@ def _parse_event(event: dict[str, Any]) -> Match | None:
     if not comps:
         return None
     comp = comps[0]
+    dt_utc = _parse_competition_date_utc(comp)
     status = (comp.get("status") or {}).get("type") or {}
     name = status.get("name") or ""
     completed = bool(status.get("completed"))
@@ -60,11 +62,28 @@ def _parse_event(event: dict[str, Any]) -> Match | None:
 
     return Match(
         event_id=eid or f"{home_name}-{away_name}-{hg}-{ag}",
+        date_utc=dt_utc,
         home=home_name,
         away=away_name,
         home_goals=hg,
         away_goals=ag,
     )
+
+
+def _parse_competition_date_utc(comp: dict[str, Any]) -> datetime | None:
+    s = comp.get("date")
+    if not s:
+        return None
+    try:
+        if isinstance(s, str) and s.endswith("Z"):
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        else:
+            dt = datetime.fromisoformat(str(s))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except Exception:
+        return None
 
 
 def _team_name(comp: dict[str, Any]) -> str:

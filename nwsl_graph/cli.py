@@ -7,7 +7,7 @@ from pathlib import Path
 from nwsl_graph.badges import ensure_badges_sync
 from nwsl_graph.csv_io import load_matches_csv
 from nwsl_graph.fetch import fetch_season_matches_sync
-from nwsl_graph.graphviz_emit import write_and_render
+from nwsl_graph.graphviz_emit import print_rankings_table, write_and_render
 from nwsl_graph.parse_espn import load_matches_from_json_file
 
 
@@ -26,6 +26,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--json", metavar="PATH", help="ESPN scoreboard JSON file")
     p.add_argument("--csv", metavar="PATH", help="CSV with home,away,home_goals,away_goals")
+    p.add_argument(
+        "--ranking",
+        choices=["wl", "elo"],
+        default="wl",
+        help="Ranking method for node ordering: wl=(wins-losses)/played, elo=ELO rating",
+    )
+    p.add_argument(
+        "--show-invis-edges",
+        action="store_true",
+        help="Render normally-invisible ranking edges (debugging layout/ranks)",
+    )
+    p.add_argument(
+        "--no-rank-spine",
+        action="store_true",
+        help="Disable the ranking spine edges between rank groups (including invisible/debug)",
+    )
     p.add_argument(
         "--badge-dir",
         type=Path,
@@ -67,11 +83,15 @@ def main(argv: list[str] | None = None) -> int:
     badge_paths = ensure_badges_sync(sorted(teams), args.badge_dir)
 
     out = Path(args.output)
+    print_rankings_table(matches, ranking=args.ranking)
     dot_path = write_and_render(
         matches,
         badge_paths,
         out,
         formats=formats,
+        ranking=args.ranking,
+        show_invis_edges=args.show_invis_edges,
+        disable_rank_spine=args.no_rank_spine,
     )
     outs = [str(out.with_suffix(f".{fmt}")) for fmt in formats]
     print(f"Wrote {dot_path} and {', '.join(outs)}")

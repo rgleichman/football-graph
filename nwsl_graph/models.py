@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from dataclasses import dataclass
 
 
@@ -8,6 +9,7 @@ class Match:
     """One completed match with a final score."""
 
     event_id: str
+    date_utc: datetime | None
     home: str
     away: str
     home_goals: int

@@ -21,6 +21,7 @@ def load_matches_csv(path: str | Path) -> list[Match]:
             out.append(
                 Match(
                     event_id=f"csv-{i}",
+                    date_utc=None,
                     home=home,
                     away=away,
                     home_goals=hg,
